@@ -4,13 +4,13 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDLiVhu8l5AcbiONPU3x6zxrcAurO2Hqs0",
-  authDomain: "guo-mailbox.firebaseapp.com",
-  databaseURL: "https://guo-mailbox-default-rtdb.firebaseio.com",
-  projectId: "guo-mailbox",
-  storageBucket: "guo-mailbox.firebasestorage.app",
-  messagingSenderId: "914131659872",
-  appId: "1:914131659872:web:fb1e8527fc5dba6664a705"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
@@ -70,7 +70,7 @@ function showSender() {
   document.querySelector('#thinking').onclick = () => sendMessage("thinking of you ❤️");
   document.querySelector('#love').onclick = () => sendMessage("i love you 💌");
   document.querySelector('#miss').onclick = () => sendMessage("i miss you 🥺");
-  document.querySelector('#proud').onclick = () => sendMessage("proud of you always ✨");
+  document.querySelector('#proud').onclick = () => sendMessage("proud of you ✨");
 
   document.querySelector('#sendCustom').onclick = () => {
     const input = document.querySelector('#custom');
