@@ -2,6 +2,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <mbedtls/base64.h>
 
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
@@ -20,6 +21,12 @@ GxEPD2_BW<GxEPD2_213_B74, GxEPD2_213_B74::HEIGHT> display(
 
 String lastMessage = "";
 
+const int BITMAP_WIDTH = 250;
+const int BITMAP_HEIGHT = 122;
+const int BITMAP_STRIDE = 32;
+const int BITMAP_RAW_SIZE = BITMAP_STRIDE * BITMAP_HEIGHT;
+uint8_t bitmapBuffer[BITMAP_RAW_SIZE];
+
 const int MESSAGE_LEFT = 8;
 const int MESSAGE_RIGHT = 250;
 const int MESSAGE_START_Y = 58;
@@ -36,6 +43,13 @@ enum EmojiIcon {
   EMOJI_SMILE,
   EMOJI_CRY,
   EMOJI_OTTER
+};
+
+struct MailboxPayload {
+  String message;
+  String changeKey;
+  bool hasMessage = false;
+  bool hasBitmap = false;
 };
 
 bool hasBytes(const String& msg, int index, const uint8_t* bytes, int length) {
@@ -265,7 +279,95 @@ void drawMessage(String msg) {
   } while (display.nextPage());
 }
 
-String fetchMessage() {
+void drawBitmapRender(const uint8_t* bitmap) {
+  Serial.println("Drawing bitmap render");
+
+  display.setRotation(1);
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.drawBitmap(0, 0, bitmap, BITMAP_WIDTH, BITMAP_HEIGHT, GxEPD_BLACK);
+  } while (display.nextPage());
+}
+
+bool decodeBase64Bitmap(const char* data) {
+  if (!data || data[0] == '\0') {
+    Serial.println("Render decode failed: data missing");
+    return false;
+  }
+
+  size_t decodedLength = 0;
+  int result = mbedtls_base64_decode(
+    bitmapBuffer,
+    BITMAP_RAW_SIZE,
+    &decodedLength,
+    (const unsigned char*)data,
+    strlen(data)
+  );
+
+  if (result != 0) {
+    Serial.print("Render decode failed: base64 error ");
+    Serial.println(result);
+    return false;
+  }
+
+  if (decodedLength != BITMAP_RAW_SIZE) {
+    Serial.print("Render decode failed: decoded bytes ");
+    Serial.println(decodedLength);
+    return false;
+  }
+
+  Serial.println("Render decode success");
+  return true;
+}
+
+bool readBitmapRender(JsonObject render) {
+  if (render.isNull()) {
+    return false;
+  }
+
+  Serial.println("Render found");
+
+  const char* type = render["type"] | "";
+  const char* bitOrder = render["bitOrder"] | "";
+  const char* encoding = render["encoding"] | "";
+  const char* data = render["data"];
+
+  bool valid =
+    strcmp(type, "bitmap-1bpp") == 0 &&
+    render["width"].as<int>() == BITMAP_WIDTH &&
+    render["height"].as<int>() == BITMAP_HEIGHT &&
+    render["stride"].as<int>() == BITMAP_STRIDE &&
+    strcmp(bitOrder, "msb") == 0 &&
+    strcmp(encoding, "base64") == 0 &&
+    data &&
+    data[0] != '\0';
+
+  if (!valid) {
+    Serial.println("Render invalid; falling back to text");
+    return false;
+  }
+
+  Serial.println("Render valid");
+  if (!decodeBase64Bitmap(data)) {
+    Serial.println("Falling back to text");
+    return false;
+  }
+
+  return true;
+}
+
+void drawMailboxPayload(const MailboxPayload& mailbox) {
+  if (mailbox.hasBitmap) {
+    drawBitmapRender(bitmapBuffer);
+    return;
+  }
+
+  Serial.println("Falling back to text");
+  drawMessage(mailbox.message);
+}
+
+bool fetchMailbox(MailboxPayload& mailbox) {
   WiFiClientSecure client;
   client.setInsecure();
 
@@ -278,26 +380,44 @@ String fetchMessage() {
     Serial.print("HTTP error: ");
     Serial.println(code);
     http.end();
-    return "";
+    return false;
   }
 
   String payload = http.getString();
   http.end();
 
-  Serial.println(payload);
+  Serial.print("Firebase payload bytes: ");
+  Serial.println(payload.length());
 
-  StaticJsonDocument<512> doc;
+  DynamicJsonDocument doc(9000);
   DeserializationError error = deserializeJson(doc, payload);
 
   if (error) {
-    Serial.println("JSON parse failed");
-    return "";
+    Serial.print("JSON parse failed: ");
+    Serial.println(error.c_str());
+    return false;
   }
 
   const char* message = doc["message"];
-  if (!message) return "";
+  if (!message) return false;
 
-  return String(message);
+  mailbox.message = String(message);
+  mailbox.hasMessage = true;
+  mailbox.hasBitmap = readBitmapRender(doc["render"].as<JsonObject>());
+
+  String sentAt = doc["sentAt"].as<String>();
+  mailbox.changeKey = mailbox.message + "|" + sentAt + "|" + String(mailbox.hasBitmap ? "bitmap" : "text");
+
+  return true;
+}
+
+String fetchMessage() {
+  MailboxPayload mailbox;
+  if (!fetchMailbox(mailbox) || !mailbox.hasMessage) {
+    return "";
+  }
+
+  return mailbox.message;
 }
 
 void setup() {
@@ -322,22 +442,22 @@ void setup() {
 
   drawMessage("WiFi connected");
 
-  String msg = fetchMessage();
+  MailboxPayload mailbox;
 
-  if (msg.length() > 0) {
-    lastMessage = msg;
-    drawMessage(msg);
+  if (fetchMailbox(mailbox) && mailbox.hasMessage) {
+    lastMessage = mailbox.changeKey;
+    drawMailboxPayload(mailbox);
   } else {
     drawMessage("No mail yet");
   }
 }
 
 void loop() {
-  String msg = fetchMessage();
+  MailboxPayload mailbox;
 
-  if (msg.length() > 0 && msg != lastMessage) {
-    lastMessage = msg;
-    drawMessage(msg);
+  if (fetchMailbox(mailbox) && mailbox.hasMessage && mailbox.changeKey != lastMessage) {
+    lastMessage = mailbox.changeKey;
+    drawMailboxPayload(mailbox);
   }
 
   delay(10000);
