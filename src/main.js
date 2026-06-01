@@ -67,12 +67,19 @@ function showSender() {
   `;
 
   function sendMessage(message) {
-    set(ref(db, "mailbox"), {
+    const payload = {
       message,
       flagUp: true,
       opened: false,
       sentAt: Date.now()
-    });
+    };
+
+    const render = createBitmapRender(message);
+    if (render) {
+      payload.render = render;
+    }
+
+    set(ref(db, "mailbox"), payload);
 
     document.querySelector('#status').textContent = "sent to the tiny mailbox 🦦";
     setTimeout(() => {
@@ -117,7 +124,49 @@ function showSender() {
 }
 
 function renderBitmapPreview(canvas, message) {
+  const { packed, base64 } = renderBitmapCanvas(canvas, message);
+
+  document.querySelector('#bitmapInfo').textContent =
+    `raw ${packed.length}/${BITMAP_RAW_SIZE} bytes · base64 ${base64.length} chars · ${base64.slice(0, 40)}`;
+}
+
+function createBitmapRender(message) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = BITMAP_WIDTH;
+    canvas.height = BITMAP_HEIGHT;
+    const { packed, base64 } = renderBitmapCanvas(canvas, message);
+    const render = {
+      type: "bitmap-1bpp",
+      width: BITMAP_WIDTH,
+      height: BITMAP_HEIGHT,
+      stride: BITMAP_STRIDE,
+      bitOrder: "msb",
+      encoding: "base64",
+      data: base64
+    };
+
+    return isValidBitmapRender(render, packed) ? render : null;
+  } catch (error) {
+    console.warn("Bitmap render generation failed; sending text-only message.", error);
+    return null;
+  }
+}
+
+function isValidBitmapRender(render, packed) {
+  return render.width === 250 &&
+    render.height === 122 &&
+    render.stride === 32 &&
+    packed.length === 3904 &&
+    typeof render.data === "string" &&
+    render.data.length > 0;
+}
+
+function renderBitmapCanvas(canvas, message) {
   const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error("Canvas rendering context unavailable");
+  }
 
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, BITMAP_WIDTH, BITMAP_HEIGHT);
@@ -134,8 +183,7 @@ function renderBitmapPreview(canvas, message) {
   const packed = thresholdAndPackCanvas(canvas, ctx);
   const base64 = bytesToBase64(packed);
 
-  document.querySelector('#bitmapInfo').textContent =
-    `raw ${packed.length}/${BITMAP_RAW_SIZE} bytes · base64 ${base64.length} chars · ${base64.slice(0, 40)}`;
+  return { packed, base64 };
 }
 
 function drawWrappedCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxY) {
