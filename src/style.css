@@ -101,6 +101,52 @@ textarea {
   font-weight: 700;
 }
 
+.bitmap-preview {
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(76,127,143,0.22);
+  border-radius: 12px;
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #4c7f8f;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.preview-toolbar button {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+#bitmapCanvas {
+  display: block;
+  width: 250px;
+  height: 122px;
+  max-width: 100%;
+  image-rendering: pixelated;
+  background: white;
+  border: 1px solid #cfd8cf;
+}
+
+.bitmap-info {
+  min-height: 16px;
+  margin: 8px 0 0;
+  color: #6d5f5f;
+  font-family: monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .tiny-link {
   display: block;
   text-align: center;
