@@ -85,7 +85,9 @@ function showSender() {
   const previewButton = document.querySelector('#previewBitmap');
 
   function updateBitmapPreview(message) {
-    const msg = message || input.value.trim() || "write something tiny...";
+    const msg = typeof message === "string"
+      ? message
+      : input.value.trim() || "write something tiny...";
     const canvas = document.querySelector('#bitmapCanvas');
     renderBitmapPreview(canvas, msg);
   }
