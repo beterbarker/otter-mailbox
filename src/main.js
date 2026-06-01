@@ -16,6 +16,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+const BITMAP_WIDTH = 250;
+const BITMAP_HEIGHT = 122;
+const BITMAP_STRIDE = Math.ceil(BITMAP_WIDTH / 8);
+const BITMAP_RAW_SIZE = BITMAP_STRIDE * BITMAP_HEIGHT;
+
 const page = window.location.pathname;
 
 if (page === "/receiver") {
@@ -48,6 +53,15 @@ function showSender() {
         <p id="status" class="status"></p>
       </section>
 
+      <section class="bitmap-preview" aria-label="bitmap message preview">
+        <div class="preview-toolbar">
+          <span>bitmap preview</span>
+          <button id="previewBitmap" type="button">preview</button>
+        </div>
+        <canvas id="bitmapCanvas" width="250" height="122"></canvas>
+        <p id="bitmapInfo" class="bitmap-info"></p>
+      </section>
+
       <a class="tiny-link" href="/receiver">open receiver preview</a>
     </main>
   `;
@@ -67,13 +81,30 @@ function showSender() {
     }, 1800);
   }
 
-  document.querySelector('#thinking').onclick = () => sendMessage("thinking of you ❤️");
-  document.querySelector('#love').onclick = () => sendMessage("i love you 💌");
-  document.querySelector('#miss').onclick = () => sendMessage("i miss you 🥺");
-  document.querySelector('#proud').onclick = () => sendMessage("proud of you ✨");
+  const input = document.querySelector('#custom');
+  const previewButton = document.querySelector('#previewBitmap');
+
+  function updateBitmapPreview(message) {
+    const msg = message || input.value.trim() || "write something tiny...";
+    const canvas = document.querySelector('#bitmapCanvas');
+    renderBitmapPreview(canvas, msg);
+  }
+
+  function sendPresetMessage(message) {
+    updateBitmapPreview(message);
+    sendMessage(message);
+  }
+
+  input.addEventListener('input', updateBitmapPreview);
+  previewButton.onclick = updateBitmapPreview;
+  updateBitmapPreview();
+
+  document.querySelector('#thinking').onclick = () => sendPresetMessage("thinking of you ❤️");
+  document.querySelector('#love').onclick = () => sendPresetMessage("i love you 💌");
+  document.querySelector('#miss').onclick = () => sendPresetMessage("i miss you 🥺");
+  document.querySelector('#proud').onclick = () => sendPresetMessage("proud of you ✨");
 
   document.querySelector('#sendCustom').onclick = () => {
-    const input = document.querySelector('#custom');
     const msg = input.value.trim();
 
     if (msg) {
@@ -81,6 +112,111 @@ function showSender() {
       input.value = "";
     }
   };
+}
+
+function renderBitmapPreview(canvas, message) {
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, BITMAP_WIDTH, BITMAP_HEIGHT);
+
+  ctx.fillStyle = 'black';
+  ctx.font = 'bold 13px Arial, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Otter Mail', 8, 20);
+  ctx.fillRect(0, 28, BITMAP_WIDTH, 1);
+
+  ctx.font = 'bold 18px Arial, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  drawWrappedCanvasText(ctx, message, 8, 55, 234, 22, 116);
+
+  const packed = thresholdAndPackCanvas(canvas, ctx);
+  const base64 = bytesToBase64(packed);
+
+  document.querySelector('#bitmapInfo').textContent =
+    `raw ${packed.length}/${BITMAP_RAW_SIZE} bytes · base64 ${base64.length} chars · ${base64.slice(0, 40)}`;
+}
+
+function drawWrappedCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxY) {
+  const graphemes = splitGraphemes(text);
+  let line = '';
+  let y = startY;
+
+  for (const grapheme of graphemes) {
+    if (grapheme === '\r') continue;
+
+    if (grapheme === '\n') {
+      ctx.fillText(line, x, y);
+      line = '';
+      y += lineHeight;
+      if (y > maxY) return;
+      continue;
+    }
+
+    const nextLine = line + grapheme;
+    if (line && ctx.measureText(nextLine).width > maxWidth) {
+      ctx.fillText(line.trimEnd(), x, y);
+      line = grapheme.trimStart();
+      y += lineHeight;
+      if (y > maxY) return;
+    } else {
+      line = nextLine;
+    }
+  }
+
+  if (line && y <= maxY) {
+    ctx.fillText(line.trimEnd(), x, y);
+  }
+}
+
+function splitGraphemes(text) {
+  if ('Segmenter' in Intl) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    return [...segmenter.segment(text)].map((part) => part.segment);
+  }
+
+  return Array.from(text);
+}
+
+function thresholdAndPackCanvas(canvas, ctx) {
+  const image = ctx.getImageData(0, 0, BITMAP_WIDTH, BITMAP_HEIGHT);
+  const pixels = image.data;
+  const packed = new Uint8Array(BITMAP_RAW_SIZE);
+
+  for (let y = 0; y < BITMAP_HEIGHT; y++) {
+    for (let x = 0; x < BITMAP_WIDTH; x++) {
+      const pixelIndex = (y * BITMAP_WIDTH + x) * 4;
+      const luminance =
+        (pixels[pixelIndex] * 0.2126) +
+        (pixels[pixelIndex + 1] * 0.7152) +
+        (pixels[pixelIndex + 2] * 0.0722);
+      const isBlack = luminance < 160;
+      const output = isBlack ? 0 : 255;
+
+      pixels[pixelIndex] = output;
+      pixels[pixelIndex + 1] = output;
+      pixels[pixelIndex + 2] = output;
+      pixels[pixelIndex + 3] = 255;
+
+      if (isBlack) {
+        const byteIndex = (y * BITMAP_STRIDE) + Math.floor(x / 8);
+        packed[byteIndex] |= 0x80 >> (x % 8);
+      }
+    }
+  }
+
+  ctx.putImageData(image, 0, 0);
+  return packed;
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  return btoa(binary);
 }
 
 function showReceiver() {
