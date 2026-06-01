@@ -70,7 +70,7 @@ function showSender() {
   document.querySelector('#thinking').onclick = () => sendMessage("thinking of you ❤️");
   document.querySelector('#love').onclick = () => sendMessage("i love you 💌");
   document.querySelector('#miss').onclick = () => sendMessage("i miss you 🥺");
-  document.querySelector('#proud').onclick = () => sendMessage("proud of you always ✨");
+  document.querySelector('#proud').onclick = () => sendMessage("proud of you ✨");
 
   document.querySelector('#sendCustom').onclick = () => {
     const input = document.querySelector('#custom');
