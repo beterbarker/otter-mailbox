@@ -7,13 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
+node_modules/
+dist/
 dist-ssr
 *.local
 .env
-.env.*
-!.env.example
+.env.local
+.env.production
 esp32/secrets.h
 
 # Editor directories and files
