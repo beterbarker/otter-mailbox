@@ -172,13 +172,9 @@ function renderBitmapCanvas(canvas, message) {
   ctx.fillRect(0, 0, BITMAP_WIDTH, BITMAP_HEIGHT);
 
   ctx.fillStyle = 'black';
-  ctx.font = 'bold 13px Arial, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Otter Mail', 8, 20);
-  ctx.fillRect(0, 28, BITMAP_WIDTH, 1);
-
-  ctx.font = 'bold 18px Arial, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-  drawWrappedCanvasText(ctx, message, 8, 55, 234, 22, 116);
+  ctx.font = 'bold 22px Arial, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  ctx.textBaseline = 'middle';
+  drawWrappedCanvasText(ctx, message, 8, 24, 234, 26, 114);
 
   const packed = thresholdAndPackCanvas(canvas, ctx);
   const base64 = bytesToBase64(packed);
