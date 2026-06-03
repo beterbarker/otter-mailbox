@@ -154,6 +154,25 @@ void drawIdleScreen() {
   } while (display.nextPage());
 }
 
+void drawIdleScreen() {
+  Serial.println("Drawing idle screen");
+
+  display.setRotation(1);
+  display.setTextColor(GxEPD_BLACK);
+
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setFont(&FreeMonoBold12pt7b);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds("Otter Mail", 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((BITMAP_WIDTH - w) / 2, ((BITMAP_HEIGHT - h) / 2) - y1);
+    display.print("Otter Mail");
+  } while (display.nextPage());
+}
+
 void drawBitmapRender(const uint8_t* bitmap) {
   Serial.println("Drawing bitmap render");
 
