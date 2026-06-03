@@ -104,7 +104,53 @@ void drawMessage(String msg) {
     display.fillScreen(GxEPD_WHITE);
     display.setFont(&FreeMonoBold12pt7b);
     renderMessageText(msg);
+  } while (display.nextPage());
+}
 
+void drawIdleHeart(int x, int y) {
+  display.fillCircle(x + 4, y + 4, 4, GxEPD_BLACK);
+  display.fillCircle(x + 10, y + 4, 4, GxEPD_BLACK);
+  display.fillTriangle(x, y + 5, x + 14, y + 5, x + 7, y + 15, GxEPD_BLACK);
+}
+
+void drawIdleEnvelope(int x, int y) {
+  display.drawRect(x, y + 1, 26, 16, GxEPD_BLACK);
+  display.drawLine(x, y + 1, x + 13, y + 10, GxEPD_BLACK);
+  display.drawLine(x + 25, y + 1, x + 13, y + 10, GxEPD_BLACK);
+  display.drawLine(x, y + 16, x + 9, y + 9, GxEPD_BLACK);
+  display.drawLine(x + 25, y + 16, x + 17, y + 9, GxEPD_BLACK);
+}
+
+void drawIdleDecoration() {
+  const int totalWidth = 78;
+  const int startX = (BITMAP_WIDTH - totalWidth) / 2;
+  const int y = 76;
+
+  drawIdleHeart(startX, y + 1);
+  drawIdleEnvelope(startX + 26, y);
+  drawIdleHeart(startX + 64, y + 1);
+}
+
+void drawIdleScreen() {
+  Serial.println("Drawing idle screen");
+
+  display.setRotation(1);
+  display.setTextColor(GxEPD_BLACK);
+
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setFont(&FreeMonoBold12pt7b);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds("Otter Mail", 0, 0, &x1, &y1, &w, &h);
+    int titleX = (BITMAP_WIDTH - w) / 2;
+    int titleY = 40 - y1;
+    display.setCursor(titleX, titleY);
+    display.print("Otter Mail");
+
+    drawIdleDecoration();
   } while (display.nextPage());
 }
 
