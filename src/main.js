@@ -172,13 +172,10 @@ function renderBitmapCanvas(canvas, message) {
   ctx.fillRect(0, 0, BITMAP_WIDTH, BITMAP_HEIGHT);
 
   ctx.fillStyle = 'black';
-  ctx.font = 'bold 13px Arial, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Otter Mail', 8, 20);
-  ctx.fillRect(0, 28, BITMAP_WIDTH, 1);
-
-  ctx.font = 'bold 18px Arial, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-  drawWrappedCanvasText(ctx, message, 8, 55, 234, 22, 116);
+  ctx.font = 'bold 21px "Trebuchet MS", "Comic Sans MS", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", cursive, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  drawWrappedCanvasText(ctx, message, BITMAP_WIDTH / 2, BITMAP_HEIGHT / 2, 232, 25, 108);
 
   const packed = thresholdAndPackCanvas(canvas, ctx);
   const base64 = bytesToBase64(packed);
@@ -186,36 +183,46 @@ function renderBitmapCanvas(canvas, message) {
   return { packed, base64 };
 }
 
-function drawWrappedCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxY) {
+function drawWrappedCanvasText(ctx, text, centerX, centerY, maxWidth, lineHeight, maxHeight) {
+  const lines = wrapCanvasText(ctx, text, maxWidth, Math.floor(maxHeight / lineHeight));
+  const blockHeight = (lines.length - 1) * lineHeight;
+  const startY = centerY - (blockHeight / 2);
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, centerX, startY + (index * lineHeight));
+  });
+}
+
+function wrapCanvasText(ctx, text, maxWidth, maxLines) {
   const graphemes = splitGraphemes(text);
+  const lines = [];
   let line = '';
-  let y = startY;
 
   for (const grapheme of graphemes) {
     if (grapheme === '\r') continue;
 
     if (grapheme === '\n') {
-      ctx.fillText(line, x, y);
+      lines.push(line.trimEnd());
       line = '';
-      y += lineHeight;
-      if (y > maxY) return;
+      if (lines.length >= maxLines) return lines;
       continue;
     }
 
     const nextLine = line + grapheme;
     if (line && ctx.measureText(nextLine).width > maxWidth) {
-      ctx.fillText(line.trimEnd(), x, y);
+      lines.push(line.trimEnd());
       line = grapheme.trimStart();
-      y += lineHeight;
-      if (y > maxY) return;
+      if (lines.length >= maxLines) return lines;
     } else {
       line = nextLine;
     }
   }
 
-  if (line && y <= maxY) {
-    ctx.fillText(line.trimEnd(), x, y);
+  if (line && lines.length < maxLines) {
+    lines.push(line.trimEnd());
   }
+
+  return lines.length > 0 ? lines : [''];
 }
 
 function splitGraphemes(text) {
