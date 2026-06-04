@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <mbedtls/base64.h>
 
+#include <ESP32Servo.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 
@@ -17,6 +18,12 @@
 GxEPD2_BW<GxEPD2_213_B74, GxEPD2_213_B74::HEIGHT> display(
   GxEPD2_213_B74(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
 );
+
+Servo flagServo;
+
+const int SERVO_PIN = 13;
+const int FLAG_DOWN_ANGLE = 10;
+const int FLAG_UP_ANGLE = 90;
 
 const unsigned long REVEAL_DURATION_MS = 30000;
 String lastRevealedMessageKey = "";
@@ -107,6 +114,10 @@ void drawMessage(String msg) {
   } while (display.nextPage());
 }
 
+void setFlagUp(bool up) {
+  flagServo.write(up ? FLAG_UP_ANGLE : FLAG_DOWN_ANGLE);
+}
+
 void drawIdleHeart(int x, int y) {
   display.fillCircle(x + 4, y + 4, 4, GxEPD_BLACK);
   display.fillCircle(x + 10, y + 4, 4, GxEPD_BLACK);
@@ -151,25 +162,6 @@ void drawIdleScreen() {
     display.print("Otter Mail");
 
     drawIdleDecoration();
-  } while (display.nextPage());
-}
-
-void drawIdleScreen() {
-  Serial.println("Drawing idle screen");
-
-  display.setRotation(1);
-  display.setTextColor(GxEPD_BLACK);
-
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setFont(&FreeMonoBold12pt7b);
-
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.getTextBounds("Otter Mail", 0, 0, &x1, &y1, &w, &h);
-    display.setCursor((BITMAP_WIDTH - w) / 2, ((BITMAP_HEIGHT - h) / 2) - y1);
-    display.print("Otter Mail");
   } while (display.nextPage());
 }
 
@@ -263,6 +255,7 @@ void drawMailboxPayload(const MailboxPayload& mailbox) {
 
 void showIdleIfNeeded() {
   revealActive = false;
+  setFlagUp(false);
 
   if (idleDrawn) {
     return;
@@ -278,6 +271,7 @@ void startMessageReveal(const MailboxPayload& mailbox) {
   revealStartedAt = millis();
   revealActive = true;
   idleDrawn = false;
+  setFlagUp(true);
   drawMailboxPayload(mailbox);
 }
 
@@ -364,6 +358,10 @@ void setup() {
   delay(500);
 
   SPI.begin(18, -1, 23, 5);
+
+  flagServo.setPeriodHertz(50);
+  flagServo.attach(SERVO_PIN, 500, 2400);
+  setFlagUp(false);
 
   display.init(115200);
   drawMessage("Connecting...");
