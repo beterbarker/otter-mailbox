@@ -25,11 +25,20 @@ const int SERVO_PIN = 13;
 const int FLAG_DOWN_ANGLE = 10;
 const int FLAG_UP_ANGLE = 90;
 
+const int BUTTON_PIN = 27;
+
+const unsigned long FETCH_INTERVAL_MS = 10000;
 const unsigned long REVEAL_DURATION_MS = 30000;
+const unsigned long BUTTON_DEBOUNCE_MS = 50;
 String lastRevealedMessageKey = "";
 bool revealActive = false;
 bool idleDrawn = false;
 unsigned long revealStartedAt = 0;
+unsigned long lastFetchAt = 0;
+bool hasPendingMessage = false;
+int lastButtonReading = HIGH;
+int stableButtonReading = HIGH;
+unsigned long lastButtonChangeAt = 0;
 
 const int BITMAP_WIDTH = 250;
 const int BITMAP_HEIGHT = 122;
@@ -51,6 +60,8 @@ struct MailboxPayload {
   bool hasBitmap = false;
   bool opened = true;
 };
+
+MailboxPayload pendingMailbox;
 
 void wrapIfNeeded(int& x, int& y, int width) {
   if (x + width <= MESSAGE_RIGHT) return;
@@ -116,6 +127,26 @@ void drawMessage(String msg) {
 
 void setFlagUp(bool up) {
   flagServo.write(up ? FLAG_UP_ANGLE : FLAG_DOWN_ANGLE);
+}
+
+bool buttonPressedEvent() {
+  int reading = digitalRead(BUTTON_PIN);
+
+  if (reading != lastButtonReading) {
+    lastButtonChangeAt = millis();
+    lastButtonReading = reading;
+  }
+
+  if (millis() - lastButtonChangeAt < BUTTON_DEBOUNCE_MS) {
+    return false;
+  }
+
+  if (reading == stableButtonReading) {
+    return false;
+  }
+
+  stableButtonReading = reading;
+  return stableButtonReading == LOW;
 }
 
 void drawIdleHeart(int x, int y) {
@@ -253,10 +284,7 @@ void drawMailboxPayload(const MailboxPayload& mailbox) {
   drawMessage(mailbox.message);
 }
 
-void showIdleIfNeeded() {
-  revealActive = false;
-  setFlagUp(false);
-
+void drawIdleIfNeeded() {
   if (idleDrawn) {
     return;
   }
@@ -265,14 +293,47 @@ void showIdleIfNeeded() {
   idleDrawn = true;
 }
 
+void showIdleIfNeeded() {
+  revealActive = false;
+  hasPendingMessage = false;
+  setFlagUp(false);
+  drawIdleIfNeeded();
+}
+
+void markMessagePending(const MailboxPayload& mailbox) {
+  Serial.println("Message pending; waiting for button");
+  pendingMailbox = mailbox;
+  hasPendingMessage = true;
+  revealActive = false;
+  setFlagUp(true);
+  drawIdleIfNeeded();
+}
+
 void startMessageReveal(const MailboxPayload& mailbox) {
   Serial.println("Starting message reveal");
   lastRevealedMessageKey = mailbox.messageKey;
   revealStartedAt = millis();
   revealActive = true;
+  hasPendingMessage = false;
   idleDrawn = false;
   setFlagUp(true);
   drawMailboxPayload(mailbox);
+}
+
+void handleButtonPress() {
+  if (!hasPendingMessage || revealActive) {
+    return;
+  }
+
+  Serial.println("Button pressed; revealing message");
+  startMessageReveal(pendingMailbox);
+}
+
+void checkRevealExpiry() {
+  if (revealActive && millis() - revealStartedAt >= REVEAL_DURATION_MS) {
+    Serial.println("Reveal expired; returning to idle");
+    showIdleIfNeeded();
+  }
 }
 
 void updateDisplayState(const MailboxPayload& mailbox, bool fetched) {
@@ -288,14 +349,29 @@ void updateDisplayState(const MailboxPayload& mailbox, bool fetched) {
     return;
   }
 
-  if (mailbox.messageKey != lastRevealedMessageKey) {
-    startMessageReveal(mailbox);
+  if (revealActive) {
+    if (mailbox.messageKey != lastRevealedMessageKey) {
+      markMessagePending(mailbox);
+      return;
+    }
+
+    checkRevealExpiry();
     return;
   }
 
-  if (revealActive && millis() - revealStartedAt >= REVEAL_DURATION_MS) {
-    Serial.println("Reveal expired; returning to idle");
+  if (mailbox.messageKey == lastRevealedMessageKey) {
     showIdleIfNeeded();
+    return;
+  }
+
+  if (mailbox.messageKey != lastRevealedMessageKey) {
+    if (!hasPendingMessage || pendingMailbox.messageKey != mailbox.messageKey) {
+      markMessagePending(mailbox);
+    } else {
+      setFlagUp(true);
+      drawIdleIfNeeded();
+    }
+    return;
   }
 }
 
@@ -359,6 +435,10 @@ void setup() {
 
   SPI.begin(18, -1, 23, 5);
 
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  lastButtonReading = digitalRead(BUTTON_PIN);
+  stableButtonReading = lastButtonReading;
+
   flagServo.setPeriodHertz(50);
   flagServo.attach(SERVO_PIN, 500, 2400);
   setFlagUp(false);
@@ -381,13 +461,23 @@ void setup() {
 
   MailboxPayload mailbox;
   bool fetched = fetchMailbox(mailbox);
+  lastFetchAt = millis();
   updateDisplayState(mailbox, fetched);
 }
 
 void loop() {
-  MailboxPayload mailbox;
-  bool fetched = fetchMailbox(mailbox);
-  updateDisplayState(mailbox, fetched);
+  if (buttonPressedEvent()) {
+    handleButtonPress();
+  }
 
-  delay(10000);
+  checkRevealExpiry();
+
+  if (millis() - lastFetchAt >= FETCH_INTERVAL_MS) {
+    MailboxPayload mailbox;
+    bool fetched = fetchMailbox(mailbox);
+    lastFetchAt = millis();
+    updateDisplayState(mailbox, fetched);
+  }
+
+  delay(25);
 }
